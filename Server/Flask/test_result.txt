@@ -1,0 +1,21 @@
+﻿
+Extracted 12 metrics:
+  ceo_pay_ratio            : 85 ratio  (conf=0.80, 
+src=regex)
+  ethics_training          : 92 %  (conf=0.80, src=regex)
+  renewable_energy         : 42 %  (conf=0.70, src=regex)
+  scope1_emissions         : 45000 tCO2e  (conf=0.80, 
+src=regex)
+  scope2_emissions         : 35000 tCO2e  (conf=0.80, 
+src=regex)
+  scope3_emissions         : 45000 tCO2e  (conf=0.80, 
+src=regex)
+  training_hours           : 24 hours  (conf=0.80, 
+src=regex)
+  [PASS] CEO pay ratio = 85 (correct, no million multiplier)
+  [PASS] Scope 1 emissions = 45000 tCO2e (correct)
+  [PASS] Scope 2 emissions = 35000 tCO2e (correct)
+  [PASS] Renewable energy = 42% (correct, no scaling)
+  [PASS] Ethics training = 92% (correct, no scaling)
+
+

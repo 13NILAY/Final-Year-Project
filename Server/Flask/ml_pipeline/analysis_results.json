@@ -1,0 +1,105 @@
+{
+  "company": "dabur-brsr",
+  "industry": "general",
+  "analysis_date": "2026-02-20",
+  "extracted_metrics": {
+    "renewable_energy": {
+      "value": 51,
+      "unit": "%",
+      "confidence": 0.897,
+      "source": "ml",
+      "context": "green energy usage within operations to reduce both scope 1 (direct emissions) and scope 2 (indirect emissions from energy purchase and use) emissions. in the fiscal year 2023-24, dabur derived 51%"
+    },
+    "female_representation": {
+      "value": 21,
+      "unit": "%",
+      "confidence": 0.975,
+      "source": "ml",
+      "context": "gender diversity target for fy 2028 to 21%"
+    },
+    "board_independence": {
+      "value": 100,
+      "unit": "%",
+      "confidence": 0.5,
+      "source": "regex",
+      "context": "100% independent"
+    }
+  },
+  "esg_scores": {
+    "environmental": {
+      "metrics": [
+        {
+          "metric": "renewable_energy",
+          "value": 51,
+          "unit": "%",
+          "score": 100,
+          "weight": 0.15,
+          "explanation": "Within ideal range (40-100).",
+          "confidence": 0.897,
+          "source": "ml"
+        }
+      ],
+      "weights": [
+        0.15
+      ],
+      "score": 100.0
+    },
+    "social": {
+      "metrics": [
+        {
+          "metric": "female_representation",
+          "value": 21,
+          "unit": "%",
+          "score": 70.0,
+          "weight": 0.2,
+          "explanation": "Below ideal minimum (30).",
+          "confidence": 0.975,
+          "source": "ml"
+        }
+      ],
+      "weights": [
+        0.2
+      ],
+      "score": 70.0
+    },
+    "governance": {
+      "metrics": [
+        {
+          "metric": "board_independence",
+          "value": 100,
+          "unit": "%",
+          "score": 100,
+          "weight": 0.25,
+          "explanation": "Within ideal range (50-100).",
+          "confidence": 0.5,
+          "source": "regex"
+        }
+      ],
+      "weights": [
+        0.25
+      ],
+      "score": 100.0
+    },
+    "overall": {
+      "score": 91.0
+    }
+  },
+  "recommendations": [],
+  "analysis_summary": {
+    "timestamp": "2026-02-20T19:49:52.300197",
+    "total_metrics_extracted": 3,
+    "overall_esg_score": 91.0,
+    "category_scores": {
+      "environmental": 100.0,
+      "social": 70.0,
+      "governance": 100.0
+    },
+    "recommendation_count": 0,
+    "high_priority_recommendations": 0,
+    "medium_priority_recommendations": 0,
+    "average_improvement_potential": 0,
+    "pipeline_type": "ml",
+    "model_loaded": true
+  },
+  "pipeline": "ml"
+}
