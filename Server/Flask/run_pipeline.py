@@ -95,10 +95,10 @@ def step_train():
         val_data=val_data,
         output_dir=MODELS_DIR,
         epochs=6,
-        batch_size=4,         # Auto-adjusts to 2 for <3GB VRAM
+        batch_size=8,         # Auto-adjusts to 2 for <3GB VRAM
         learning_rate=1e-5,
         max_length=256,       # Full context for RoBERTa
-        gradient_accumulation=4,
+        gradient_accumulation=2,
         patience=3,
     )
 

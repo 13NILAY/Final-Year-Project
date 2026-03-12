@@ -89,12 +89,12 @@ def train_model(
     val_data: List[Dict],
     output_dir: str = "models",
     epochs: int = 6,
-    batch_size: int = 4,       # Small for 2GB VRAM
+    batch_size: int = 8,       # Small for 2GB VRAM
     learning_rate: float = 1e-5,
     warmup_ratio: float = 0.1,
     patience: int = 3,
     max_length: int = 256,
-    gradient_accumulation: int = 4,  # Effective batch = 4 * 4 = 16
+    gradient_accumulation: int = 2,  # Effective batch = 4 * 4 = 16
     device: Optional[str] = None,
 ) -> Dict:
     """
@@ -129,9 +129,10 @@ def train_model(
     """
     # Setup device
     if device is None:
-        device = torch.device('cuda')
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
+
     print(f"[Training] Device: {device}")
 
     # Check CUDA memory and auto-adjust for RoBERTa
@@ -150,9 +151,21 @@ def train_model(
     train_dataset = ESGDataset(train_data, tokenizer, max_length)
     val_dataset = ESGDataset(val_data, tokenizer, max_length)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=2,
+        pin_memory=True
+    )
 
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=2,
+        pin_memory=True
+    )
     print(f"[Training] Train: {len(train_dataset)}, Val: {len(val_dataset)}")
     print(f"[Training] Batch: {batch_size}, Max length: {max_length}, "
           f"Grad accum: {gradient_accumulation}")
@@ -214,9 +227,9 @@ def train_model(
         optimizer.zero_grad()
 
         for step, batch in enumerate(train_loader):
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['label'].to(device)
+            input_ids = batch['input_ids'].to(device, non_blocking=True)
+            attention_mask = batch['attention_mask'].to(device, non_blocking=True)
+            labels = batch['label'].to(device, non_blocking=True)
 
             if use_amp:
                 with torch.amp.autocast('cuda'):
@@ -260,9 +273,9 @@ def train_model(
 
         with torch.no_grad():
             for batch in val_loader:
-                input_ids = batch['input_ids'].to(device)
-                attention_mask = batch['attention_mask'].to(device)
-                labels = batch['label'].to(device)
+                input_ids = batch['input_ids'].to(device, non_blocking=True)
+                attention_mask = batch['attention_mask'].to(device, non_blocking=True)
+                labels = batch['label'].to(device, non_blocking=True)
 
                 if use_amp:
                     with torch.amp.autocast('cuda'):
@@ -430,7 +443,7 @@ if __name__ == "__main__":
         val_data=val_data,
         output_dir=output_dir,
         epochs=6,
-        batch_size=4,
+        batch_size=8,
         learning_rate=1e-5,
         patience=3,
         max_length=256,
