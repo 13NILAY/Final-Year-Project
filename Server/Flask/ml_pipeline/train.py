@@ -88,12 +88,12 @@ def train_model(
     train_data: List[Dict],
     val_data: List[Dict],
     output_dir: str = "models",
-    epochs: int = 10,
+    epochs: int = 6,
     batch_size: int = 4,       # Small for 2GB VRAM
     learning_rate: float = 1e-5,
     warmup_ratio: float = 0.1,
-    patience: int = 5,
-    max_length: int = 512,
+    patience: int = 3,
+    max_length: int = 256,
     gradient_accumulation: int = 4,  # Effective batch = 4 * 4 = 16
     device: Optional[str] = None,
 ) -> Dict:
@@ -429,11 +429,11 @@ if __name__ == "__main__":
         train_data=train_data,
         val_data=val_data,
         output_dir=output_dir,
-        epochs=10,
+        epochs=6,
         batch_size=4,
         learning_rate=1e-5,
-        patience=5,
-        max_length=512,
+        patience=3,
+        max_length=256,
     )
 
     print(f"\nTraining complete!")

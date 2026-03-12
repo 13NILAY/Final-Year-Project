@@ -94,12 +94,12 @@ def step_train():
         train_data=train_data,
         val_data=val_data,
         output_dir=MODELS_DIR,
-        epochs=10,
+        epochs=6,
         batch_size=4,         # Auto-adjusts to 2 for <3GB VRAM
         learning_rate=1e-5,
-        max_length=512,       # Full context for RoBERTa
+        max_length=256,       # Full context for RoBERTa
         gradient_accumulation=4,
-        patience=5,
+        patience=3,
     )
 
     print(f"\n✅ Training complete!")
