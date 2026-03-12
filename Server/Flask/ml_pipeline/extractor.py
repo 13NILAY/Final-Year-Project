@@ -363,7 +363,7 @@ class MLESGExtractor:
         """
         # Set device
         if device is None:
-            self.device = torch.device('cpu' )
+            self.device = torch.device('cuda' )
         else:
             self.device = torch.device(device)
 

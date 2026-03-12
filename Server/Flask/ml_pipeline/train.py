@@ -129,7 +129,7 @@ def train_model(
     """
     # Setup device
     if device is None:
-        device = torch.device('cpu')
+        device = torch.device('cuda')
     else:
         device = torch.device(device)
     print(f"[Training] Device: {device}")
@@ -379,7 +379,7 @@ def save_model(model: ESGMetricClassifier, path: str, metrics: Optional[Dict] = 
 def load_model(path: str, device: Optional[str] = None) -> ESGMetricClassifier:
     """Load a trained model."""
     if device is None:
-        device = torch.device('cpu')
+        device = torch.device('cuda')
     else:
         device = torch.device(device)
 
