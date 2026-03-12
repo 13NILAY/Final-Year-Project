@@ -88,7 +88,7 @@ def train_model(
     train_data: List[Dict],
     val_data: List[Dict],
     output_dir: str = "models",
-    epochs: int = 20,
+    epochs: int = 10,
     batch_size: int = 4,       # Small for 2GB VRAM
     learning_rate: float = 1e-5,
     warmup_ratio: float = 0.1,
@@ -429,7 +429,7 @@ if __name__ == "__main__":
         train_data=train_data,
         val_data=val_data,
         output_dir=output_dir,
-        epochs=20,
+        epochs=10,
         batch_size=4,
         learning_rate=1e-5,
         patience=5,
