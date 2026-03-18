@@ -1,0 +1,45 @@
+============================================================
+ESG METRIC EXTRACTION - EVALUATION REPORT
+============================================================
+
+📊 OVERALL METRICS:
+  Precision:      100.00%
+  Recall:         76.19%
+  F1 Score:       86.49%
+  Value Accuracy: 93.75%
+  TP: 16 | FP: 0 | FN: 5
+
+🌍 ENVIRONMENTAL:
+  Precision: 100.00% | Recall: 70.00% | F1: 82.35%
+  Value Accuracy: 85.71%
+
+👥 SOCIAL:
+  Precision: 100.00% | Recall: 83.33% | F1: 90.91%
+  Value Accuracy: 100.00%
+
+🏛️ GOVERNANCE:
+  Precision: 100.00% | Recall: 80.00% | F1: 88.89%
+  Value Accuracy: 100.00%
+
+📋 PER-METRIC DETAILS:
+  🔍 renewable_energy          | Status: missed          | Pred: None | Truth: 55 | Conf: 0.00
+  ✅ ethics_training           | Status: correct         | Pred: 92 | Truth: 92 | Conf: 0.80
+  ✅ female_representation     | Status: correct         | Pred: 36 | Truth: 36 | Conf: 0.80
+  ✅ lost_time_injury          | Status: correct         | Pred: 0.35 | Truth: 0.35 | Conf: 0.80
+  ✅ energy_consumption        | Status: correct         | Pred: 85000 | Truth: 85000 | Conf: 0.80
+  🔍 community_investment      | Status: missed          | Pred: None | Truth: 150 | Conf: 0.00
+  ✅ female_directors          | Status: correct         | Pred: 25 | Truth: 25 | Conf: 0.80
+  ✅ employee_turnover         | Status: correct         | Pred: 12 | Truth: 12 | Conf: 0.80
+  ✅ water_withdrawal          | Status: correct         | Pred: 2500000 | Truth: 2500000 | Conf: 0.70
+  ✅ waste_recycled            | Status: correct         | Pred: 62 | Truth: 62 | Conf: 0.80
+  ✅ co2_emissions             | Status: correct         | Pred: 110000 | Truth: 110000 | Conf: 0.80
+  ✅ hazardous_waste           | Status: correct         | Pred: 450 | Truth: 450 | Conf: 0.80
+  ✅ board_independence        | Status: correct         | Pred: 55 | Truth: 55 | Conf: 0.80
+  ✅ ghg_emissions             | Status: correct         | Pred: 125000 | Truth: 125000 | Conf: 0.70
+  ⚠️ scope1_emissions          | Status: value_mismatch  | Pred: 45000 | Truth: 28000 | Conf: 0.80
+  ✅ training_hours            | Status: correct         | Pred: 24 | Truth: 24 | Conf: 0.80
+  🔍 scope2_emissions          | Status: missed          | Pred: None | Truth: 35000 | Conf: 0.00
+  ✅ employee_satisfaction     | Status: correct         | Pred: 78 | Truth: 78 | Conf: 0.70
+  🔍 whistleblower_cases       | Status: missed          | Pred: None | Truth: 12 | Conf: 0.00
+  ✅ ceo_pay_ratio             | Status: correct         | Pred: 85 | Truth: 85 | Conf: 0.80
+  🔍 scope3_emissions          | Status: missed          | Pred: None | Truth: 45000 | Conf: 0.00

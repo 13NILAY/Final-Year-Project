@@ -165,8 +165,8 @@ def chunk_text(
 
     # Check minimum word count before chunking
     word_count = len(text.split())
-    if word_count < 200:
-        print(f"  [Preprocessing] WARNING: Text has only {word_count} words (minimum 200 recommended)")
+    if word_count < 80:
+        print(f"  [Preprocessing] WARNING: Text has only {word_count} words (minimum 80 recommended)")
         if word_count < min_chunk_size:
             print(f"  [Preprocessing] Text too short for chunking, skipping")
             return []

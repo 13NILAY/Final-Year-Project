@@ -1,367 +1,352 @@
 """
-Evaluation Module
-=================
-Evaluate ML extraction accuracy and compare with regex baseline.
+Evaluation Module (Improved)
+============================
+Evaluate extraction accuracy with rich metrics including qualifiers,
+value tolerance, and error categorization.
 """
 
 import os
 import json
 import numpy as np
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 from collections import defaultdict
+from datetime import datetime
 
-from .labeling import ESG_METRICS, METRIC_NAMES, METRIC_TO_ID, ID_TO_METRIC, CATEGORY_MAP
+from .canonical_metrics import get_alias_manager
+from .extractor import ESGStagedExtractor
 
+
+# ----------------------------------------------------------------------
+# Evaluation helpers
+# ----------------------------------------------------------------------
+
+def _value_match(val1: float, val2: float, tolerance: float = 0.15) -> bool:
+    """Check if two numeric values match within relative tolerance."""
+    if val1 == 0 and val2 == 0:
+        return True
+    if val1 == 0 or val2 == 0:
+        return False
+    return abs(val1 - val2) / max(abs(val1), abs(val2)) <= tolerance
+
+
+def _unit_match(unit1: str, unit2: str, alias_manager) -> bool:
+    """Normalize and compare units."""
+    # Simple normalization: lowercase, strip
+    u1 = unit1.lower().strip() if unit1 else ''
+    u2 = unit2.lower().strip() if unit2 else ''
+    # If both empty, consider match
+    if not u1 and not u2:
+        return True
+    # Could add unit aliases later
+    return u1 == u2
+
+
+def _qualifier_match(q1: Any, q2: Any) -> bool:
+    """Match qualifiers (year, scope, etc.) - allow None to match anything."""
+    if q1 is None or q2 is None:
+        return True  # missing qualifier is not penalized
+    return q1 == q2
+
+
+# ----------------------------------------------------------------------
+# Main evaluation function
+# ----------------------------------------------------------------------
 
 def evaluate_extraction(
-    predictions: Dict[str, Dict],
-    ground_truths: Dict[str, Dict],
+    ground_truth: List[Dict[str, Any]],
+    predictions: List[Dict[str, Any]],
     value_tolerance: float = 0.15,
-) -> Dict:
+) -> Dict[str, Any]:
     """
-    Evaluate extraction predictions against ground truth.
+    Evaluate predictions against ground truth at the sample level.
+    Each sample is a dict with fields: metric_name, value, unit, year, scope,
+    actual_or_target, geography, entity_level, source_text (optional), etc.
+    Returns detailed evaluation metrics.
+    """
+    alias_manager = get_alias_manager(use_embeddings=False)
+
+    # Metrics per canonical metric
+    per_metric = defaultdict(lambda: {'tp': 0, 'fp': 0, 'fn': 0,
+                                       'value_correct': 0, 'unit_correct': 0,
+                                       'qualifier_correct': defaultdict(int)})
     
-    Args:
-        predictions: {metric_name: {value, unit, confidence}}
-        ground_truths: {metric_name: {value, unit}}
-        value_tolerance: Acceptable relative error for value matching (0.15 = 15%)
-        
-    Returns:
-        Evaluation metrics dict
-    """
-    all_metrics = set(list(predictions.keys()) + list(ground_truths.keys()))
+    # Error buckets
+    error_buckets = defaultdict(int)
 
-    tp = 0  # Correctly extracted
-    fp = 0  # Extracted but wrong
-    fn = 0  # Missed (in ground truth but not extracted)
-    value_matches = 0
-    total_with_values = 0
+    # Track matched predictions to avoid double-counting
+    matched_preds = set()
 
-    detailed = []
+    # For each ground truth sample, find best matching prediction
+    for gt in ground_truth:
+        gt_metric = gt['metric_name']
+        if gt_metric == 'no_metric':
+            # Skip negative samples? We'll handle separately.
+            continue
 
-    for metric in all_metrics:
-        pred = predictions.get(metric)
-        truth = ground_truths.get(metric)
+        best_match = None
+        best_score = -1  # higher is better
 
-        if truth is not None and pred is not None:
-            # Both exist - check value accuracy
-            tp += 1
-            total_with_values += 1
+        for i, pred in enumerate(predictions):
+            if i in matched_preds:
+                continue
+            if pred['canonical_metric'] != gt_metric:
+                continue  # metric mismatch -> not a candidate for this GT
 
-            pred_val = pred.get('value', 0)
-            truth_val = truth.get('value', 0)
+            # Compute match quality: value, unit, qualifiers
+            score = 0
+            if _value_match(pred['value'], gt['value'], value_tolerance):
+                score += 10
+            if _unit_match(pred.get('normalized_unit', pred['raw_unit']), gt['unit'], alias_manager):
+                score += 5
+            if _qualifier_match(pred.get('year'), gt.get('year')):
+                score += 2
+            if _qualifier_match(pred.get('scope'), gt.get('scope')):
+                score += 2
+            if _qualifier_match(pred.get('actual_or_target'), gt.get('actual_or_target')):
+                score += 1
+            if _qualifier_match(pred.get('geography'), gt.get('geography')):
+                score += 1
+            if _qualifier_match(pred.get('entity_level'), gt.get('entity_level')):
+                score += 1
 
-            if truth_val != 0:
-                rel_error = abs(pred_val - truth_val) / abs(truth_val)
-                value_match = rel_error <= value_tolerance
+            if score > best_score:
+                best_score = score
+                best_match = (i, pred, score)
+
+        if best_match:
+            idx, pred, _ = best_match
+            matched_preds.add(idx)
+
+            # Update per-metric stats
+            pm = per_metric[gt_metric]
+            pm['tp'] += 1
+
+            # Value correctness
+            if _value_match(pred['value'], gt['value'], value_tolerance):
+                pm['value_correct'] += 1
             else:
-                value_match = pred_val == 0
+                error_buckets['value_mismatch'] += 1
 
-            if value_match:
-                value_matches += 1
+            # Unit correctness
+            if _unit_match(pred.get('normalized_unit', pred['raw_unit']), gt['unit'], alias_manager):
+                pm['unit_correct'] += 1
+            else:
+                error_buckets['unit_mismatch'] += 1
 
-            detailed.append({
-                'metric': metric,
-                'status': 'correct' if value_match else 'value_mismatch',
-                'predicted_value': pred_val,
-                'truth_value': truth_val,
-                'confidence': pred.get('confidence', 0),
-                'source': pred.get('source', 'unknown'),
-            })
+            # Qualifier correctness
+            for q in ['year', 'scope', 'actual_or_target', 'geography', 'entity_level']:
+                if _qualifier_match(pred.get(q), gt.get(q)):
+                    pm['qualifier_correct'][q] += 1
+                else:
+                    error_buckets[f'{q}_mismatch'] += 1
 
-        elif pred is not None and truth is None:
-            fp += 1
-            detailed.append({
-                'metric': metric,
-                'status': 'false_positive',
-                'predicted_value': pred.get('value', 0),
-                'truth_value': None,
-                'confidence': pred.get('confidence', 0),
-                'source': pred.get('source', 'unknown'),
-            })
+            # Exact match (all fields correct)
+            exact = (
+                _value_match(pred['value'], gt['value'], value_tolerance) and
+                _unit_match(pred.get('normalized_unit', pred['raw_unit']), gt['unit'], alias_manager) and
+                all(_qualifier_match(pred.get(q), gt.get(q)) for q in ['year', 'scope', 'actual_or_target', 'geography', 'entity_level'])
+            )
+            if exact:
+                pm['exact'] = pm.get('exact', 0) + 1
+            else:
+                error_buckets['partial_match'] += 1
 
-        elif truth is not None and pred is None:
-            fn += 1
-            detailed.append({
-                'metric': metric,
-                'status': 'missed',
-                'predicted_value': None,
-                'truth_value': truth.get('value', 0),
-                'confidence': 0,
-                'source': 'none',
-            })
+        else:
+            # No prediction for this GT metric
+            per_metric[gt_metric]['fn'] += 1
+            error_buckets['missed'] += 1
 
-    # Compute metrics
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    # False positives: predictions not matched to any GT
+    for i, pred in enumerate(predictions):
+        if i not in matched_preds:
+            pm = per_metric[pred['canonical_metric']]
+            pm['fp'] += 1
+            error_buckets['false_positive'] += 1
+
+    # Compute aggregate metrics
+    total_tp = sum(pm['tp'] for pm in per_metric.values())
+    total_fp = sum(pm['fp'] for pm in per_metric.values())
+    total_fn = sum(pm['fn'] for pm in per_metric.values())
+
+    precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
+    recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-    value_accuracy = value_matches / total_with_values if total_with_values > 0 else 0
+
+    # Value/unit/qualifier accuracy among correct detections
+    value_acc = sum(pm['value_correct'] for pm in per_metric.values()) / total_tp if total_tp > 0 else 0
+    unit_acc = sum(pm['unit_correct'] for pm in per_metric.values()) / total_tp if total_tp > 0 else 0
+    qualifier_acc = {}
+    for q in ['year', 'scope', 'actual_or_target', 'geography', 'entity_level']:
+        qualifier_acc[q] = sum(pm['qualifier_correct'][q] for pm in per_metric.values()) / total_tp if total_tp > 0 else 0
+
+    exact_match = sum(pm.get('exact', 0) for pm in per_metric.values()) / total_tp if total_tp > 0 else 0
+
+    # Per-metric breakdown
+    per_metric_summary = {}
+    for metric, pm in per_metric.items():
+        p = pm['tp'] / (pm['tp'] + pm['fp']) if (pm['tp'] + pm['fp']) > 0 else 0
+        r = pm['tp'] / (pm['tp'] + pm['fn']) if (pm['tp'] + pm['fn']) > 0 else 0
+        f = 2 * p * r / (p + r) if (p + r) > 0 else 0
+        per_metric_summary[metric] = {
+            'precision': round(p, 4),
+            'recall': round(r, 4),
+            'f1': round(f, 4),
+            'tp': pm['tp'],
+            'fp': pm['fp'],
+            'fn': pm['fn'],
+            'value_accuracy': pm['value_correct'] / pm['tp'] if pm['tp'] > 0 else 0,
+            'unit_accuracy': pm['unit_correct'] / pm['tp'] if pm['tp'] > 0 else 0,
+        }
 
     return {
-        'precision': round(precision, 4),
-        'recall': round(recall, 4),
-        'f1': round(f1, 4),
-        'value_accuracy': round(value_accuracy, 4),
-        'tp': tp,
-        'fp': fp,
-        'fn': fn,
-        'total_ground_truth': len(ground_truths),
-        'total_predicted': len(predictions),
-        'detailed': detailed,
+        'overall': {
+            'precision': round(precision, 4),
+            'recall': round(recall, 4),
+            'f1': round(f1, 4),
+            'value_accuracy': round(value_acc, 4),
+            'unit_accuracy': round(unit_acc, 4),
+            'exact_match': round(exact_match, 4),
+            'tp': total_tp,
+            'fp': total_fp,
+            'fn': total_fn,
+        },
+        'qualifier_accuracy': {k: round(v, 4) for k, v in qualifier_acc.items()},
+        'per_metric': per_metric_summary,
+        'error_buckets': dict(error_buckets),
     }
 
 
-def evaluate_by_category(
-    predictions: Dict[str, Dict],
-    ground_truths: Dict[str, Dict],
+# ----------------------------------------------------------------------
+# Evaluation on test dataset
+# ----------------------------------------------------------------------
+
+def evaluate_on_testset(
+    test_path: str,
+    model_path: Optional[str] = None,
     value_tolerance: float = 0.15,
-) -> Dict:
+) -> Dict[str, Any]:
     """
-    Evaluate extraction grouped by ESG category (Environmental, Social, Governance).
+    Load test dataset, run extraction on each sample's text, and evaluate.
     """
-    results = {}
+    # Load test samples
+    ground_truth = []
+    with open(test_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            sample = json.loads(line)
+            # Only include positive samples for evaluation (skip no_metric)
+            if sample.get('metric_name') != 'no_metric':
+                ground_truth.append(sample)
 
-    for category, metrics in CATEGORY_MAP.items():
-        cat_preds = {k: v for k, v in predictions.items() if k in metrics}
-        cat_truths = {k: v for k, v in ground_truths.items() if k in metrics}
-        results[category] = evaluate_extraction(cat_preds, cat_truths, value_tolerance)
+    # Initialize extractor
+    extractor = ESGStagedExtractor(model_path=model_path)
 
-    # Overall
-    results['overall'] = evaluate_extraction(predictions, ground_truths, value_tolerance)
+    # Run extraction on each sample's text (treat each chunk independently)
+    predictions = []
+    for gt in ground_truth:
+        text = gt['text']
+        # Extract from this chunk
+        rich = extractor.extract_from_text(text)
+        # For each predicted metric, create a prediction record
+        for canonical, info in rich.items():
+            pred = {
+                'canonical_metric': canonical,
+                'value': info['value'],
+                'raw_unit': info['raw_unit'],
+                'normalized_unit': info['normalized_unit'],
+                'year': info.get('year'),
+                'scope': info.get('scope'),
+                'actual_or_target': info.get('actual_or_target'),
+                'geography': info.get('geography'),
+                'entity_level': info.get('entity_level'),
+                'confidence': info['confidence'],
+            }
+            predictions.append(pred)
 
+    # Evaluate
+    results = evaluate_extraction(ground_truth, predictions, value_tolerance)
     return results
 
 
-def compare_with_regex(
-    ml_results: Dict[str, Dict],
-    regex_results: Dict[str, Dict],
-    ground_truth: Dict[str, Dict],
-    value_tolerance: float = 0.15,
-) -> Dict:
-    """
-    Compare ML extraction results with regex baseline.
-    
-    Returns:
-        Comparison dict with per-method and per-category scores
-    """
-    ml_eval = evaluate_by_category(ml_results, ground_truth, value_tolerance)
-    regex_eval = evaluate_by_category(regex_results, ground_truth, value_tolerance)
-
-    comparison = {
-        'ml': ml_eval,
-        'regex': regex_eval,
-        'improvement': {},
-    }
-
-    # Calculate improvements
-    for category in ['environmental', 'social', 'governance', 'overall']:
-        ml_f1 = ml_eval.get(category, {}).get('f1', 0)
-        regex_f1 = regex_eval.get(category, {}).get('f1', 0)
-        improvement = ml_f1 - regex_f1
-
-        comparison['improvement'][category] = {
-            'ml_f1': ml_f1,
-            'regex_f1': regex_f1,
-            'f1_improvement': round(improvement, 4),
-            'better': 'ml' if improvement > 0 else ('regex' if improvement < 0 else 'tie'),
-        }
-
-    return comparison
-
+# ----------------------------------------------------------------------
+# Report generation
+# ----------------------------------------------------------------------
 
 def generate_evaluation_report(
-    eval_results: Dict,
+    eval_results: Dict[str, Any],
     output_path: Optional[str] = None,
 ) -> str:
     """
     Generate a human-readable evaluation report.
     """
     lines = []
-    lines.append("=" * 60)
-    lines.append("ESG METRIC EXTRACTION - EVALUATION REPORT")
-    lines.append("=" * 60)
+    lines.append("=" * 70)
+    lines.append("ESG METRIC EXTRACTION - DETAILED EVALUATION REPORT")
+    lines.append("=" * 70)
+    lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
-    if 'overall' in eval_results:
-        overall = eval_results['overall']
-        lines.append(f"\n📊 OVERALL METRICS:")
-        lines.append(f"  Precision:      {overall['precision']:.2%}")
-        lines.append(f"  Recall:         {overall['recall']:.2%}")
-        lines.append(f"  F1 Score:       {overall['f1']:.2%}")
-        lines.append(f"  Value Accuracy: {overall['value_accuracy']:.2%}")
-        lines.append(f"  TP: {overall['tp']} | FP: {overall['fp']} | FN: {overall['fn']}")
+    overall = eval_results['overall']
+    lines.append("\n📊 OVERALL METRICS:")
+    lines.append(f"  Precision:      {overall['precision']:.2%}")
+    lines.append(f"  Recall:         {overall['recall']:.2%}")
+    lines.append(f"  F1 Score:       {overall['f1']:.2%}")
+    lines.append(f"  Value Accuracy: {overall['value_accuracy']:.2%}")
+    lines.append(f"  Unit Accuracy:  {overall['unit_accuracy']:.2%}")
+    lines.append(f"  Exact Match:    {overall['exact_match']:.2%}")
+    lines.append(f"  TP: {overall['tp']} | FP: {overall['fp']} | FN: {overall['fn']}")
 
-    for category in ['environmental', 'social', 'governance']:
-        if category in eval_results:
-            cat = eval_results[category]
-            emoji = {'environmental': '🌍', 'social': '👥', 'governance': '🏛️'}
-            lines.append(f"\n{emoji.get(category, '')} {category.upper()}:")
-            lines.append(f"  Precision: {cat['precision']:.2%} | "
-                        f"Recall: {cat['recall']:.2%} | "
-                        f"F1: {cat['f1']:.2%}")
-            lines.append(f"  Value Accuracy: {cat['value_accuracy']:.2%}")
+    lines.append("\n🎯 QUALIFIER ACCURACY (among correct detections):")
+    for q, acc in eval_results['qualifier_accuracy'].items():
+        lines.append(f"  {q:18s}: {acc:.2%}")
 
-    # Detailed per-metric results
-    if 'overall' in eval_results and 'detailed' in eval_results['overall']:
-        lines.append(f"\n📋 PER-METRIC DETAILS:")
-        for d in eval_results['overall']['detailed']:
-            status_emoji = {
-                'correct': '✅',
-                'value_mismatch': '⚠️',
-                'false_positive': '❌',
-                'missed': '🔍',
-            }
-            emoji = status_emoji.get(d['status'], '  ')
-            lines.append(f"  {emoji} {d['metric']:25s} | "
-                        f"Status: {d['status']:15s} | "
-                        f"Pred: {d['predicted_value']} | "
-                        f"Truth: {d['truth_value']} | "
-                        f"Conf: {d['confidence']:.2f}")
+    lines.append("\n🔍 ERROR BUCKETS:")
+    for err, count in eval_results['error_buckets'].items():
+        lines.append(f"  {err:25s}: {count}")
+
+    lines.append("\n📈 PER-METRIC BREAKDOWN:")
+    lines.append(f"{'Metric':30s} {'P':>6} {'R':>6} {'F1':>6} {'Val%':>6} {'Unit%':>6}")
+    lines.append("-" * 70)
+    for metric, pm in sorted(eval_results['per_metric'].items()):
+        lines.append(f"{metric:30s} {pm['precision']:.2%} {pm['recall']:.2%} "
+                     f"{pm['f1']:.2%} {pm['value_accuracy']:.2%} {pm['unit_accuracy']:.2%}")
 
     report = '\n'.join(lines)
     print(report)
 
     if output_path:
         os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.', exist_ok=True)
-        with open(output_path, 'w',encoding='utf-8') as f:
+        with open(output_path, 'w', encoding='utf-8') as f:
             f.write(report)
         print(f"\n[Evaluation] Report saved to {output_path}")
 
     return report
 
 
-def generate_comparison_report(
-    comparison: Dict,
-    output_path: Optional[str] = None,
-) -> str:
-    """
-    Generate a comparison report between ML and regex extraction.
-    """
-    lines = []
-    lines.append("=" * 60)
-    lines.append("ML vs REGEX EXTRACTION - COMPARISON REPORT")
-    lines.append("=" * 60)
-
-    lines.append(f"\n{'Category':<20} {'ML F1':>10} {'Regex F1':>10} {'Improvement':>12} {'Winner':>8}")
-    lines.append("-" * 60)
-
-    for category in ['environmental', 'social', 'governance', 'overall']:
-        imp = comparison['improvement'].get(category, {})
-        ml_f1 = imp.get('ml_f1', 0)
-        regex_f1 = imp.get('regex_f1', 0)
-        improvement = imp.get('f1_improvement', 0)
-        better = imp.get('better', 'tie')
-
-        icon = '🟢' if better == 'ml' else ('🔴' if better == 'regex' else '⚪')
-        cat_display = category.upper() if category == 'overall' else category.capitalize()
-        lines.append(f"  {icon} {cat_display:<18} {ml_f1:>10.2%} {regex_f1:>10.2%} "
-                    f"{improvement:>+10.2%} {better:>8}")
-
-    report = '\n'.join(lines)
-    print(report)
-
-    if output_path:
-        os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.', exist_ok=True)
-        with open(output_path, 'w',encoding='utf-8') as f:
-            f.write(report)
-
-    return report
-
-
-# ─── TEST SAMPLES FOR VALIDATION ─────────────────────────────────────────────
-
-DUMMY_TEST_SAMPLES = [
-    {
-        'text': """Our total greenhouse gas emissions were 125,000 tCO2e. 
-                   Scope 1: 45,000 tCO2e, Scope 2: 35,000 tCO2e, Scope 3: 45,000 tCO2e.
-                   Renewable energy usage: 42%. Energy consumption: 85,000 MWh.""",
-        'ground_truth': {
-            'ghg_emissions': {'value': 125000, 'unit': 'tCO2e'},
-            'scope1_emissions': {'value': 45000, 'unit': 'tCO2e'},
-            'scope2_emissions': {'value': 35000, 'unit': 'tCO2e'},
-            'scope3_emissions': {'value': 45000, 'unit': 'tCO2e'},
-            'renewable_energy': {'value': 42, 'unit': '%'},
-            'energy_consumption': {'value': 85000, 'unit': 'MWh'},
-        }
-    },
-    {
-        'text': """Employee turnover rate: 12%. Female representation: 36%.
-                   Average training hours per employee: 24 hours.
-                   Board independence: 55%. Female directors: 25%.""",
-        'ground_truth': {
-            'employee_turnover': {'value': 12, 'unit': '%'},
-            'female_representation': {'value': 36, 'unit': '%'},
-            'training_hours': {'value': 24, 'unit': 'hours'},
-            'board_independence': {'value': 55, 'unit': '%'},
-            'female_directors': {'value': 25, 'unit': '%'},
-        }
-    },
-    {
-        'text': """The company invested INR 150 crore in community investment programs.
-                   CEO pay ratio: 85:1. Ethics training completion: 92%.
-                   Whistleblower cases reported: 12. Lost time injury rate: 0.35.""",
-        'ground_truth': {
-            'community_investment': {'value': 150, 'unit': 'INR Crore'},
-            'ceo_pay_ratio': {'value': 85, 'unit': 'ratio'},
-            'ethics_training': {'value': 92, 'unit': '%'},
-            'whistleblower_cases': {'value': 12, 'unit': 'count'},
-            'lost_time_injury': {'value': 0.35, 'unit': 'rate'},
-        }
-    },
-    {
-        'text': """Water withdrawal totaled 2,500,000 m3. 
-                   Hazardous waste generated: 450 tonnes. 
-                   Waste recycling rate: 62%.
-                   CO2 emissions: 110,000 tCO2e.""",
-        'ground_truth': {
-            'water_withdrawal': {'value': 2500000, 'unit': 'm3'},
-            'hazardous_waste': {'value': 450, 'unit': 'tonnes'},
-            'waste_recycled': {'value': 62, 'unit': '%'},
-            'co2_emissions': {'value': 110000, 'unit': 'tCO2e'},
-        }
-    },
-    {
-        'text': """Employee satisfaction survey results showed 78% satisfaction.
-                   Scope 1 emissions reduced to 28,000 tCO2e, representing a 15% decrease.
-                   55% of our energy comes from renewable sources.""",
-        'ground_truth': {
-            'employee_satisfaction': {'value': 78, 'unit': '%'},
-            'scope1_emissions': {'value': 28000, 'unit': 'tCO2e'},
-            'renewable_energy': {'value': 55, 'unit': '%'},
-        }
-    },
-]
-
+# ----------------------------------------------------------------------
+# CLI
+# ----------------------------------------------------------------------
 
 if __name__ == "__main__":
-    from .extractor import MLESGExtractor
+    import sys
+    import argparse
 
-    print("=" * 60)
-    print("ESG EXTRACTION - EVALUATION")
-    print("=" * 60)
+    parser = argparse.ArgumentParser(description="Evaluate ESG extraction.")
+    parser.add_argument("test_path", help="Path to test JSONL file (rich format)")
+    parser.add_argument("--model", help="Path to model checkpoint (optional)")
+    parser.add_argument("--output", help="Output report file (optional)")
+    parser.add_argument("--tolerance", type=float, default=0.15, help="Value tolerance (default 0.15)")
+    args = parser.parse_args()
 
-    extractor = MLESGExtractor()
-
-    all_preds = {}
-    all_truths = {}
-
-    for i, sample in enumerate(DUMMY_TEST_SAMPLES):
-        print(f"\n--- Test Sample {i+1} ---")
-        preds = extractor.extract_from_text(sample['text'])
-        truths = sample['ground_truth']
-
-        for k, v in preds.items():
-            all_preds[f"s{i}_{k}"] = v
-        for k, v in truths.items():
-            all_truths[f"s{i}_{k}"] = v
-
-        result = evaluate_extraction(preds, truths)
-        print(f"  F1: {result['f1']:.2%} | Precision: {result['precision']:.2%} | "
-              f"Recall: {result['recall']:.2%}")
-
-    # Overall evaluation
-    print("\n")
-    overall = evaluate_by_category(
-        {k.split('_', 1)[1]: v for k, v in all_preds.items()},
-        {k.split('_', 1)[1]: v for k, v in all_truths.items()},
+    results = evaluate_on_testset(
+        test_path=args.test_path,
+        model_path=args.model,
+        value_tolerance=args.tolerance,
     )
-    generate_evaluation_report(overall)
+
+    generate_evaluation_report(results, args.output)
+
+    # Also save raw results as JSON
+    if args.output:
+        json_output = args.output.replace('.txt', '.json') if args.output.endswith('.txt') else args.output + '.json'
+        with open(json_output, 'w') as f:
+            json.dump(results, f, indent=2)
+        print(f"Raw results saved to {json_output}")

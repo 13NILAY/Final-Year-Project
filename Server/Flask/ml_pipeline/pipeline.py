@@ -1,67 +1,73 @@
 """
 Pipeline Orchestrator
 =====================
-Unified pipeline: PDF → preprocess → ML extract → score → results.
-Drop-in replacement for ESGReportAnalyzer.analyze_report().
+Unified pipeline: PDF → preprocess → staged extraction → score → results.
+Drop-in replacement for ESGReportAnalyzer.analyze_report() with enhanced outputs.
 """
 
 import os
 import sys
 import json
-import torch
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
-# Add parent directory to path so we can import esg_new
+# Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from .preprocessing import extract_text_from_pdf, clean_text, preprocess_pdf
-from .extractor import MLESGExtractor
-from .labeling import ESG_METRICS, CATEGORY_MAP, generate_labeled_dataset, load_dataset
+from .preprocessing import extract_text_from_pdf
+from .extractor import ESGStagedExtractor
+from .canonical_metrics import get_alias_manager
+from .labeling import generate_labeled_dataset
+from .table_parser import extract_table_metrics  # <-- IMPORT ADDED
 
 
 class ESGMLPipeline:
     """
-    Complete ML-based ESG analysis pipeline.
-    
-    This is a drop-in replacement for the regex-based ESGReportAnalyzer.
-    It uses a fine-tuned RoBERTa model with multi-head classifier for
-    metric identification with regex fallback for value extraction.
+    Complete ML-based ESG analysis pipeline using staged hybrid extraction.
     
     Usage:
         pipeline = ESGMLPipeline(industry='technology')
         results = pipeline.analyze_report('path/to/esg_report.pdf')
     """
 
-    # Industry-specific score thresholds (matching esg_new.py ESGScoreRanges)
+    # Industry-specific score thresholds – updated to canonical metric names
     ENVIRONMENTAL_RANGES = {
-        'ghg_emissions': {'unit': 'tCO2e', 'ideal': 'decreasing', 'weight': 0.15, 'threshold': 100000},
+        'total_ghg_emissions': {'unit': 'tCO2e', 'ideal': 'decreasing', 'weight': 0.15, 'threshold': 100000},
         'scope1_emissions': {'unit': 'tCO2e', 'ideal': 'decreasing', 'weight': 0.10, 'threshold': 50000},
         'scope2_emissions': {'unit': 'tCO2e', 'ideal': 'decreasing', 'weight': 0.10, 'threshold': 50000},
         'scope3_emissions': {'unit': 'tCO2e', 'ideal': 'decreasing', 'weight': 0.10, 'threshold': 200000},
-        'co2_emissions': {'unit': 'tCO2e', 'ideal': 'decreasing', 'weight': 0.10, 'threshold': 100000},
-        'energy_consumption': {'unit': 'MWh', 'ideal': 'decreasing', 'weight': 0.10, 'threshold': 500000},
-        'renewable_energy': {'unit': '%', 'ideal': (40, 100), 'weight': 0.15},
-        'water_withdrawal': {'unit': 'm3', 'ideal': 'decreasing', 'weight': 0.10, 'threshold': 5000000},
-        'waste_recycled': {'unit': '%', 'ideal': (50, 100), 'weight': 0.05},
-        'hazardous_waste': {'unit': 'tonnes', 'ideal': 'decreasing', 'weight': 0.05, 'threshold': 1000},
+        'energy_consumption_total': {'unit': 'MWh', 'ideal': 'decreasing', 'weight': 0.10, 'threshold': 500000},
+        'renewable_energy_share': {'unit': '%', 'ideal': (40, 100), 'weight': 0.15},
+        'water_withdrawal_total': {'unit': 'm3', 'ideal': 'decreasing', 'weight': 0.10, 'threshold': 5000000},
+        'waste_recycled_share': {'unit': '%', 'ideal': (50, 100), 'weight': 0.05},
+        'hazardous_waste_total': {'unit': 'tonnes', 'ideal': 'decreasing', 'weight': 0.05, 'threshold': 1000},
     }
 
     SOCIAL_RANGES = {
-        'employee_turnover': {'unit': '%', 'ideal': (5, 15), 'weight': 0.20},
-        'female_representation': {'unit': '%', 'ideal': (30, 50), 'weight': 0.20},
-        'training_hours': {'unit': 'hours', 'ideal': (20, 100), 'weight': 0.15},
-        'lost_time_injury': {'unit': 'rate', 'ideal': (0, 1), 'weight': 0.15},
-        'employee_satisfaction': {'unit': '%', 'ideal': (70, 100), 'weight': 0.15},
-        'community_investment': {'unit': 'INR Crore', 'ideal': 'increasing', 'weight': 0.15, 'threshold': 100},
+        'employee_turnover_rate': {'unit': '%', 'ideal': (5, 15), 'weight': 0.20},
+        'female_employees_share': {'unit': '%', 'ideal': (30, 50), 'weight': 0.20},
+        'training_hours_per_employee': {'unit': 'hours', 'ideal': (20, 100), 'weight': 0.15},
+        'lost_time_injury_rate': {'unit': 'rate', 'ideal': (0, 1), 'weight': 0.15},
+        'employee_satisfaction_score': {'unit': '%', 'ideal': (70, 100), 'weight': 0.15},
+        'community_investment_total': {'unit': 'INR Crore', 'ideal': 'increasing', 'weight': 0.15, 'threshold': 100},
     }
 
     GOVERNANCE_RANGES = {
-        'board_independence': {'unit': '%', 'ideal': (50, 100), 'weight': 0.25},
-        'female_directors': {'unit': '%', 'ideal': (25, 50), 'weight': 0.20},
+        'board_independence_share': {'unit': '%', 'ideal': (50, 100), 'weight': 0.25},
+        'female_board_share': {'unit': '%', 'ideal': (25, 50), 'weight': 0.20},
         'ceo_pay_ratio': {'unit': 'ratio', 'ideal': (1, 50), 'weight': 0.25},
-        'ethics_training': {'unit': '%', 'ideal': (90, 100), 'weight': 0.15},
-        'whistleblower_cases': {'unit': 'count', 'ideal': (0, 5), 'weight': 0.15},
+        'ethics_training_completion_rate': {'unit': '%', 'ideal': (90, 100), 'weight': 0.15},
+        'whistleblower_reports_received': {'unit': 'count', 'ideal': (0, 5), 'weight': 0.15},
+    }
+
+    # Expected metrics per industry (simplified; can be loaded from config)
+    EXPECTED_METRICS = {
+        'general': list(ENVIRONMENTAL_RANGES.keys()) + list(SOCIAL_RANGES.keys()) + list(GOVERNANCE_RANGES.keys()),
+        'technology': ['total_ghg_emissions', 'scope1_emissions', 'scope2_emissions', 'energy_consumption_total',
+                       'renewable_energy_share', 'water_withdrawal_total', 'waste_recycled_share',
+                       'employee_turnover_rate', 'female_employees_share', 'training_hours_per_employee',
+                       'board_independence_share', 'female_board_share', 'ethics_training_completion_rate'],
+        # Add other industries as needed
     }
 
     def __init__(
@@ -69,19 +75,20 @@ class ESGMLPipeline:
         model_path: Optional[str] = None,
         industry: str = 'general',
         confidence_threshold: float = 0.35,
-        device: Optional[str] = "cuda",
+        device: Optional[str] = None,
     ):
         """
         Initialize the ML pipeline.
         
         Args:
-            model_path: Path to trained model checkpoint
-            industry: Industry for scoring norms ('general', 'technology', 'manufacturing', etc.)
-            confidence_threshold: Min ML confidence to accept prediction
+            model_path: Path to trained model checkpoint (optional)
+            industry: Industry for scoring norms
+            confidence_threshold: Min confidence to accept a prediction
             device: 'cuda', 'cpu', or None for auto-detect
         """
         self.industry = industry.lower()
         self.confidence_threshold = confidence_threshold
+        self.alias_manager = get_alias_manager()
 
         # Auto-detect model path if not provided
         if model_path is None:
@@ -91,25 +98,23 @@ class ESGMLPipeline:
             if os.path.exists(default_path):
                 model_path = default_path
 
-        self.extractor = MLESGExtractor(
+        self.extractor = ESGStagedExtractor(
             model_path=model_path,
             confidence_threshold=confidence_threshold,
-            device=device,
         )
 
         print(f"  [Pipeline] Industry: {self.industry}")
-        print(f"  [Pipeline] ML model: {'loaded' if self.extractor.model_loaded else 'regex-only mode'}")
+        print(f"  [Pipeline] Extractor: staged hybrid")
 
     def analyze_report(self, pdf_path: str) -> Optional[Dict[str, Any]]:
         """
         Complete analysis of an ESG report.
-        Drop-in replacement for ESGReportAnalyzer.analyze_report().
         
         Args:
             pdf_path: Path to the PDF file
             
         Returns:
-            Analysis results dict matching existing system format
+            Analysis results dict with both simple and detailed metrics.
         """
         print(f"\n{'='*60}")
         print(f"ML PIPELINE: ANALYZING ESG REPORT")
@@ -125,29 +130,57 @@ class ESGMLPipeline:
 
         print(f"✓ Extracted {len(raw_text):,} characters from PDF")
 
-        # Step 2: Extract metrics using ML + regex
-        extracted_metrics = self.extractor.extract_from_text(raw_text)
-        print(f"✓ Found {len(extracted_metrics)} ESG metrics")
+        # Step 2a: Extract table candidates
+        table_candidates = extract_table_metrics(pdf_path)
+        print(f"✓ Found {len(table_candidates)} table-based metric candidates")
 
-        if not extracted_metrics:
-            print("⚠ No ESG metrics found in this report.")
+        # Step 2b: Extract text candidates
+        text_candidates = self.extractor._extract_candidates_from_text(raw_text)
+        print(f"✓ Found {len(text_candidates)} text-based metric candidates")
 
-        # Step 3: Calculate ESG scores
+        # Combine all candidates
+        all_candidates = text_candidates + table_candidates
+
+        # Step 2c: Map all candidates to canonical metrics
+        detailed_metrics = self.extractor.map_candidates(all_candidates)
+        print(f"✓ Mapped to {len(detailed_metrics)} canonical metrics")
+
+        # Step 3: Build simple metrics dict for scoring (backward compatibility)
+        extracted_metrics = {}
+        for canonical, info in detailed_metrics.items():
+            extracted_metrics[canonical] = {
+                'value': info['value'],
+                'unit': info['raw_unit'],
+                'confidence': info['confidence'],
+                'source': info.get('extraction_method', 'unknown'),
+            }
+
+        # Step 4: Calculate ESG scores
         scores = self._calculate_category_scores(extracted_metrics)
 
-        # Step 4: Generate recommendations
+        # Step 5: Add low-coverage warning
+        expected = self.EXPECTED_METRICS.get(self.industry, self.EXPECTED_METRICS['general'])
+        coverage = len(extracted_metrics) / len(expected) if expected else 0
+        if coverage < 0.5:
+            scores['low_confidence'] = True
+            print(f"⚠ Low metric coverage ({coverage:.1%}) – ESG score may be unreliable.")
+        else:
+            scores['low_confidence'] = False
+
+        # Step 6: Generate recommendations
         recommendations = self._generate_recommendations(extracted_metrics, scores)
 
-        # Step 5: Prepare results (matching existing format)
+        # Step 7: Prepare results
         results = {
             'company': os.path.basename(pdf_path).replace('.pdf', ''),
             'industry': self.industry,
             'analysis_date': datetime.now().strftime('%Y-%m-%d'),
-            'extracted_metrics': extracted_metrics,
+            'extracted_metrics': extracted_metrics,                 # simple version
+            'extracted_metrics_detailed': detailed_metrics,         # rich version with qualifiers
             'esg_scores': scores,
             'recommendations': recommendations,
             'analysis_summary': self._create_summary(scores, extracted_metrics, recommendations),
-            'pipeline': 'ml',  # Flag to identify ML pipeline results
+            'pipeline': 'ml_staged',
         }
 
         return results
@@ -226,10 +259,10 @@ class ESGMLPipeline:
         return 50, "Metric not in scoring framework"
 
     def _get_category(self, metric_name: str) -> str:
-        """Get the ESG category for a metric."""
-        for category, metrics in CATEGORY_MAP.items():
-            if metric_name in metrics:
-                return category
+        """Get the ESG category for a metric using AliasManager."""
+        metric_info = self.alias_manager.metrics.get(metric_name)
+        if metric_info:
+            return metric_info['category']
         return 'unknown'
 
     def _calculate_category_scores(self, extracted_metrics: Dict) -> Dict:
@@ -307,7 +340,7 @@ class ESGMLPipeline:
         recommendations = []
 
         recommendation_templates = {
-            'ghg_emissions': {
+            'total_ghg_emissions': {
                 'category': 'Environmental', 'priority': 'High', 'metric': 'GHG Emissions',
                 'recommendation': 'Implement comprehensive carbon reduction strategy',
                 'action_items': [
@@ -347,8 +380,8 @@ class ESGMLPipeline:
                     'Design products for lower carbon footprint',
                 ]
             },
-            'renewable_energy': {
-                'category': 'Environmental', 'priority': 'Medium', 'metric': 'Renewable Energy',
+            'renewable_energy_share': {
+                'category': 'Environmental', 'priority': 'Medium', 'metric': 'Renewable Energy Share',
                 'recommendation': 'Increase renewable energy usage',
                 'action_items': [
                     'Install on-site solar panels',
@@ -357,7 +390,7 @@ class ESGMLPipeline:
                     'Join industry initiatives like RE100',
                 ]
             },
-            'female_representation': {
+            'female_employees_share': {
                 'category': 'Social', 'priority': 'High', 'metric': 'Gender Diversity',
                 'recommendation': 'Enhance gender diversity and inclusion',
                 'action_items': [
@@ -367,7 +400,7 @@ class ESGMLPipeline:
                     'Conduct regular pay equity audits',
                 ]
             },
-            'employee_turnover': {
+            'employee_turnover_rate': {
                 'category': 'Social', 'priority': 'Medium', 'metric': 'Employee Retention',
                 'recommendation': 'Improve employee retention and satisfaction',
                 'action_items': [
@@ -377,7 +410,7 @@ class ESGMLPipeline:
                     'Benchmark compensation against market',
                 ]
             },
-            'board_independence': {
+            'board_independence_share': {
                 'category': 'Governance', 'priority': 'Medium', 'metric': 'Board Independence',
                 'recommendation': 'Strengthen board independence and oversight',
                 'action_items': [
@@ -389,7 +422,6 @@ class ESGMLPipeline:
             },
         }
 
-        # Generate recommendations for metrics with low scores
         for category_name, cat_data in scores.items():
             if category_name == 'overall':
                 continue
@@ -397,7 +429,6 @@ class ESGMLPipeline:
                 metric_name = metric_data['metric']
                 score = metric_data['score']
 
-                # Only recommend if score is below threshold
                 threshold = 60 if category_name != 'governance' else 70
                 if score < threshold and metric_name in recommendation_templates:
                     template = recommendation_templates[metric_name]
@@ -416,7 +447,6 @@ class ESGMLPipeline:
                         'potential_improvement': f"Potential score increase: {100 - score:.0f} points",
                     })
 
-        # Sort by priority then score
         recommendations.sort(key=lambda x: (0 if x['priority'] == 'High' else 1, x['score']))
         return recommendations
 
@@ -442,8 +472,8 @@ class ESGMLPipeline:
             'high_priority_recommendations': high_priority,
             'medium_priority_recommendations': medium_priority,
             'average_improvement_potential': round(avg_improvement, 1),
-            'pipeline_type': 'ml',
-            'model_loaded': self.extractor.model_loaded,
+            'pipeline_type': 'ml_staged',
+            'low_confidence': scores.get('low_confidence', False),
         }
 
 
@@ -458,9 +488,7 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) > 1 and sys.argv[1] == '--test':
-        # Test with sample data
         pipeline = ESGMLPipeline(industry='technology')
-
         test_text = """
         Our total GHG emissions were 50,000 tCO2e.
         Scope 1: 20,000 tCO2e, Scope 2: 15,000 tCO2e, Scope 3: 15,000 tCO2e.
@@ -468,21 +496,18 @@ if __name__ == "__main__":
         Female representation: 35%. Employee turnover: 12%.
         Board independence: 55%.
         """
-
         results = pipeline.extractor.extract_from_text(test_text)
         print(f"\nExtracted {len(results)} metrics:")
         for m, info in sorted(results.items()):
-            print(f"  {m:25s}: {info['value']} {info['unit']} "
-                  f"(conf: {info['confidence']:.2f}, src: {info['source']})")
+            print(f"  {m:30s}: {info['value']} {info['raw_unit']} (conf: {info['confidence']:.2f})")
+            if info.get('year'):
+                print(f"      year: {info['year']}, scope: {info.get('scope')}, actual/target: {info.get('actual_or_target')}")
 
     elif len(sys.argv) > 1:
-        # Analyze a real PDF
         pdf_path = sys.argv[1]
         industry = sys.argv[2] if len(sys.argv) > 2 else 'general'
-
         pipeline = ESGMLPipeline(industry=industry)
         results = pipeline.analyze_report(pdf_path)
-
         if results:
             print(f"\n✅ Analysis complete!")
             print(f"  ESG Score: {results['esg_scores']['overall']['score']}/100")

@@ -6,7 +6,7 @@ Run the full pipeline: Generate Labels → Train Model → Evaluate → Launch A
 Usage:
     python run_pipeline.py label       # Step 1: Generate labeled dataset from PDFs
     python run_pipeline.py train       # Step 2: Train the RoBERTa model
-    python run_pipeline.py evaluate    # Step 3: Evaluate on test samples
+    python run_pipeline.py evaluate    # Step 3: Evaluate on test samples (rich)
     python run_pipeline.py analyze <pdf_path> [industry]  # Analyze a PDF
     python run_pipeline.py serve [port] # Launch Flask API
     python run_pipeline.py all         # Run full pipeline (label → train → evaluate)
@@ -44,14 +44,13 @@ def step_label():
         print(f"ERROR: Dataset directory not found: {DATASET_DIR}")
         print("Expected structure: Dataset/Tech/*.pdf, Dataset/Finance/*.pdf, etc.")
         return False
-    # --- ADDED: Show dataset contents ---
+
     print(f"\nDataset directory: {DATASET_DIR}")
     subfolders = [d for d in os.listdir(DATASET_DIR) if os.path.isdir(os.path.join(DATASET_DIR, d))]
     print(f"Subfolders found: {subfolders}")
     for sub in subfolders:
         pdf_count = len([f for f in os.listdir(os.path.join(DATASET_DIR, sub)) if f.lower().endswith('.pdf')])
         print(f"  {sub}: {pdf_count} PDFs")
-    # ------------------------------------
 
     stats = generate_labeled_dataset(
         pdf_dir=DATASET_DIR,
@@ -63,11 +62,17 @@ def step_label():
     )
 
     print(f"\n✅ Dataset generated: {LABELED_DATA_PATH}")
-    print(f"   Total labeled samples: {stats['labeled_chunks']}")
-    print(f"   Total negative samples: {stats['negative_chunks']}")
+
+    # Handle both old and new stats keys
+    if 'positive_samples' in stats:
+        print(f"   Total labeled samples: {stats['positive_samples']}")
+        print(f"   Total negative samples: {stats['negative_samples']}")
+    else:
+        # Fallback to old keys (for backward compatibility)
+        print(f"   Total labeled samples: {stats.get('labeled_chunks', 'N/A')}")
+        print(f"   Total negative samples: {stats.get('negative_chunks', 'N/A')}")
+
     return True
-
-
 def step_train():
     """Step 2: Train the RoBERTa classifier."""
     print("\n" + "=" * 60)
@@ -94,19 +99,19 @@ def step_train():
         train_data=train_data,
         val_data=val_data,
         output_dir=MODELS_DIR,
-        epochs=6,
-        batch_size=8,         # Auto-adjusts to 2 for <3GB VRAM
+        epochs=20,
+        batch_size=4,
         learning_rate=1e-5,
-        max_length=256,       # Full context for RoBERTa
-        gradient_accumulation=2,
-        patience=3,
+        max_length=512,
+        gradient_accumulation=4,
+        patience=5,
     )
 
     print(f"\n✅ Training complete!")
     print(f"   Best F1: {results['best_val_f1']:.4f} at epoch {results['best_epoch']}")
     print(f"   Model saved: {results['model_path']}")
 
-    # Save test data for evaluation
+    # Save test data (with all rich fields) for evaluation
     test_path = os.path.join(DATA_DIR, "test_data.jsonl")
     with open(test_path, 'w', encoding='utf-8') as f:
         for sample in test_data:
@@ -117,81 +122,41 @@ def step_train():
 
 
 def step_evaluate():
-    """Step 3: Evaluate the trained model."""
+    """Step 3: Evaluate the trained model using rich metrics."""
     print("\n" + "=" * 60)
-    print("STEP 3: EVALUATING MODEL")
+    print("STEP 3: EVALUATING MODEL (DETAILED)")
     print("=" * 60)
 
-    from ml_pipeline.extractor import MLESGExtractor
-    from ml_pipeline.evaluate import (
-        evaluate_extraction, evaluate_by_category,
-        generate_evaluation_report, DUMMY_TEST_SAMPLES,
-        compare_with_regex, generate_comparison_report,
+    from ml_pipeline.evaluate import evaluate_on_testset, generate_evaluation_report
+
+    test_path = os.path.join(DATA_DIR, "test_data.jsonl")
+
+    if not os.path.exists(test_path):
+        print("ERROR: test_data.jsonl not found. Train the model first.")
+        return 0
+
+    # Run detailed evaluation
+    results = evaluate_on_testset(
+        test_path=test_path,
+        model_path=MODEL_PATH if os.path.exists(MODEL_PATH) else None,
+        value_tolerance=0.15
     )
 
-    # Initialize ML extractor
-    model_path = MODEL_PATH if os.path.exists(MODEL_PATH) else None
-    ml_extractor = MLESGExtractor(model_path=model_path)
+    # Generate report
+    report_path = os.path.join(PIPELINE_DIR, "evaluation_report.txt")
+    generate_evaluation_report(results, report_path)
 
-    # Evaluate on dummy test samples
-    print("\n--- Evaluation on Test Samples ---")
-    all_ml_preds = {}
-    all_regex_preds = {}
-    all_truths = {}
+    # Print summary
+    overall = results['overall']
+    print(f"\n📊 OVERALL METRICS:")
+    print(f"  Precision:      {overall['precision']:.2%}")
+    print(f"  Recall:         {overall['recall']:.2%}")
+    print(f"  F1 Score:       {overall['f1']:.2%}")
+    print(f"  Value Accuracy: {overall['value_accuracy']:.2%}")
+    print(f"  Unit Accuracy:  {overall['unit_accuracy']:.2%}")
+    print(f"  Exact Match:    {overall['exact_match']:.2%}")
 
-    for i, sample in enumerate(DUMMY_TEST_SAMPLES):
-        ml_preds = ml_extractor.extract_from_text(sample['text'])
-        regex_preds = ml_extractor._regex_fallback_extract(sample['text'])
-        truths = sample['ground_truth']
-
-        for k, v in ml_preds.items():
-            all_ml_preds[f"s{i}_{k}"] = v
-        for k, v in regex_preds.items():
-            all_regex_preds[f"s{i}_{k}"] = v
-        for k, v in truths.items():
-            all_truths[f"s{i}_{k}"] = v
-
-    # Per-category evaluation
-    ml_eval = evaluate_by_category(
-        {k.split('_', 1)[1] if '_' in k else k: v for k, v in all_ml_preds.items()},
-        {k.split('_', 1)[1] if '_' in k else k: v for k, v in all_truths.items()},
-    )
-
-    print("\n📊 ML EXTRACTION RESULTS:")
-    report = generate_evaluation_report(
-        ml_eval,
-        output_path=os.path.join(PIPELINE_DIR, "evaluation_report.txt"),
-    )
-
-    # Compare with regex
-    regex_eval = evaluate_by_category(
-        {k.split('_', 1)[1] if '_' in k else k: v for k, v in all_regex_preds.items()},
-        {k.split('_', 1)[1] if '_' in k else k: v for k, v in all_truths.items()},
-    )
-
-    comparison = {
-        'ml': ml_eval,
-        'regex': regex_eval,
-        'improvement': {},
-    }
-    for cat in ['environmental', 'social', 'governance', 'overall']:
-        ml_f1 = ml_eval.get(cat, {}).get('f1', 0)
-        rx_f1 = regex_eval.get(cat, {}).get('f1', 0)
-        comparison['improvement'][cat] = {
-            'ml_f1': ml_f1, 'regex_f1': rx_f1,
-            'f1_improvement': round(ml_f1 - rx_f1, 4),
-            'better': 'ml' if ml_f1 > rx_f1 else ('regex' if rx_f1 > ml_f1 else 'tie'),
-        }
-
-    print("\n📊 ML vs REGEX COMPARISON:")
-    generate_comparison_report(
-        comparison,
-        output_path=os.path.join(PIPELINE_DIR, "comparison_report.txt"),
-    )
-
-    # Return overall F1
-    overall_f1 = ml_eval.get('overall', {}).get('f1', 0)
-    return overall_f1
+    return overall['f1']
 
 
 def step_analyze(pdf_path: str, industry: str = 'general'):

@@ -1,98 +1,116 @@
 {
-  "company": "dabur-brsr",
+  "company": "infosys-esg-report-2022-23",
   "industry": "general",
-  "analysis_date": "2026-02-20",
+  "analysis_date": "2026-03-15",
   "extracted_metrics": {
-    "renewable_energy": {
-      "value": 51,
-      "unit": "%",
-      "confidence": 0.897,
+    "water_withdrawal": {
+      "value": 1175764.82,
+      "unit": "m3",
+      "confidence": 0.9,
       "source": "ml",
-      "context": "green energy usage within operations to reduce both scope 1 (direct emissions) and scope 2 (indirect emissions from energy purchase and use) emissions. in the fiscal year 2023-24, dabur derived 51%"
+      "context": "11,75,764.82 kl of water"
     },
     "female_representation": {
-      "value": 21,
+      "value": 39.4,
       "unit": "%",
-      "confidence": 0.975,
+      "confidence": 0.94,
       "source": "ml",
-      "context": "gender diversity target for fy 2028 to 21%"
+      "context": "women employees 39.4%"
     },
-    "board_independence": {
-      "value": 100,
+    "renewable_energy": {
+      "value": 75,
       "unit": "%",
-      "confidence": 0.5,
-      "source": "regex",
-      "context": "100% independent"
+      "confidence": 0.927,
+      "source": "ml",
+      "context": "75% renewable"
+    },
+    "female_directors": {
+      "value": 12.5,
+      "unit": "%",
+      "confidence": 0.859,
+      "source": "ml",
+      "context": "12.5% women on the board"
     }
   },
   "esg_scores": {
     "environmental": {
       "metrics": [
         {
+          "metric": "water_withdrawal",
+          "value": 1175764.82,
+          "unit": "m3",
+          "score": 88.2,
+          "weight": 0.1,
+          "explanation": "Current: 1,175,765 m3. Lower is better.",
+          "confidence": 0.9,
+          "source": "ml"
+        },
+        {
           "metric": "renewable_energy",
-          "value": 51,
+          "value": 75,
           "unit": "%",
           "score": 100,
           "weight": 0.15,
           "explanation": "Within ideal range (40-100).",
-          "confidence": 0.897,
+          "confidence": 0.927,
           "source": "ml"
         }
       ],
       "weights": [
+        0.1,
         0.15
       ],
-      "score": 100.0
+      "score": 95.3
     },
     "social": {
       "metrics": [
         {
           "metric": "female_representation",
-          "value": 21,
+          "value": 39.4,
           "unit": "%",
-          "score": 70.0,
+          "score": 100,
           "weight": 0.2,
-          "explanation": "Below ideal minimum (30).",
-          "confidence": 0.975,
+          "explanation": "Within ideal range (30-50).",
+          "confidence": 0.94,
           "source": "ml"
         }
       ],
       "weights": [
         0.2
       ],
-      "score": 70.0
+      "score": 100.0
     },
     "governance": {
       "metrics": [
         {
-          "metric": "board_independence",
-          "value": 100,
+          "metric": "female_directors",
+          "value": 12.5,
           "unit": "%",
-          "score": 100,
-          "weight": 0.25,
-          "explanation": "Within ideal range (50-100).",
-          "confidence": 0.5,
-          "source": "regex"
+          "score": 50.0,
+          "weight": 0.2,
+          "explanation": "Below ideal minimum (25).",
+          "confidence": 0.859,
+          "source": "ml"
         }
       ],
       "weights": [
-        0.25
+        0.2
       ],
-      "score": 100.0
+      "score": 50.0
     },
     "overall": {
-      "score": 91.0
+      "score": 83.1
     }
   },
   "recommendations": [],
   "analysis_summary": {
-    "timestamp": "2026-02-20T19:49:52.300197",
-    "total_metrics_extracted": 3,
-    "overall_esg_score": 91.0,
+    "timestamp": "2026-03-15T21:17:45.320186",
+    "total_metrics_extracted": 4,
+    "overall_esg_score": 83.1,
     "category_scores": {
-      "environmental": 100.0,
-      "social": 70.0,
-      "governance": 100.0
+      "environmental": 95.3,
+      "social": 100.0,
+      "governance": 50.0
     },
     "recommendation_count": 0,
     "high_priority_recommendations": 0,

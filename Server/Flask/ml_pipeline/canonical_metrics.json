@@ -1,0 +1,380 @@
+{
+  "metrics": {
+    "total_ghg_emissions": {
+      "category": "environmental",
+      "description": "Total greenhouse gas emissions (Scope 1 + 2 + 3 or as reported)",
+      "expected_unit": "tCO2e",
+      "aliases": [
+        "total greenhouse gas emissions",
+        "total ghg emissions",
+        "total carbon emissions",
+        "total co2 equivalent emissions",
+        "total emissions",
+        "ghg emissions total",
+        "total carbon footprint"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "scope1_emissions": {
+      "category": "environmental",
+      "description": "Direct greenhouse gas emissions from owned sources",
+      "expected_unit": "tCO2e",
+      "aliases": [
+        "scope 1 emissions",
+        "direct emissions",
+        "scope one emissions",
+        "s1 emissions"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "scope2_emissions": {
+      "category": "environmental",
+      "description": "Indirect emissions from purchased energy",
+      "expected_unit": "tCO2e",
+      "aliases": [
+        "scope 2 emissions",
+        "indirect emissions from energy",
+        "purchased electricity emissions",
+        "scope two emissions",
+        "s2 emissions"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target", "market_based", "location_based"]
+    },
+    "scope3_emissions": {
+      "category": "environmental",
+      "description": "Value chain emissions (other indirect)",
+      "expected_unit": "tCO2e",
+      "aliases": [
+        "scope 3 emissions",
+        "value chain emissions",
+        "other indirect emissions",
+        "scope three emissions",
+        "s3 emissions"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "co2_emissions": {
+      "category": "environmental",
+      "description": "Carbon dioxide emissions (may overlap with ghg)",
+      "expected_unit": "tCO2e",
+      "aliases": [
+        "co2 emissions",
+        "carbon dioxide emissions",
+        "co2e emissions"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "energy_consumption_total": {
+      "category": "environmental",
+      "description": "Total energy consumption across all sources",
+      "expected_unit": "MWh",
+      "aliases": [
+        "total energy consumption",
+        "total energy use",
+        "energy consumption total",
+        "total energy usage",
+        "total electricity and fuel consumption"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "renewable_energy_share": {
+      "category": "environmental",
+      "description": "Share of energy from renewable sources (as percentage of total)",
+      "expected_unit": "%",
+      "aliases": [
+        "renewable energy share",
+        "percentage of renewable energy",
+        "renewable energy percentage",
+        "share of renewables",
+        "renewable energy mix"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "renewable_electricity_share": {
+      "category": "environmental",
+      "description": "Share of electricity from renewable sources",
+      "expected_unit": "%",
+      "aliases": [
+        "renewable electricity share",
+        "green electricity percentage",
+        "electricity from renewable sources",
+        "renewable energy share of electricity"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "water_withdrawal_total": {
+      "category": "environmental",
+      "description": "Total water withdrawn from all sources",
+      "expected_unit": "m3",
+      "aliases": [
+        "total water withdrawal",
+        "water consumption",
+        "water usage total",
+        "freshwater withdrawal",
+        "total water intake"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "water_discharge_total": {
+      "category": "environmental",
+      "description": "Total water discharged",
+      "expected_unit": "m3",
+      "aliases": [
+        "water discharge",
+        "water effluent",
+        "wastewater discharge",
+        "water returned to environment"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "water_recycled_reused": {
+      "category": "environmental",
+      "description": "Volume of water recycled or reused",
+      "expected_unit": "m3",
+      "aliases": [
+        "water recycled",
+        "water reused",
+        "reclaimed water",
+        "water recycling volume",
+        "water reuse volume"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "waste_total": {
+      "category": "environmental",
+      "description": "Total waste generated",
+      "expected_unit": "tonnes",
+      "aliases": [
+        "total waste generated",
+        "total waste",
+        "waste produced"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "waste_recycled_share": {
+      "category": "environmental",
+      "description": "Share of waste recycled",
+      "expected_unit": "%",
+      "aliases": [
+        "waste recycled percentage",
+        "recycling rate",
+        "waste diversion rate",
+        "percentage of waste recycled"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "hazardous_waste_total": {
+      "category": "environmental",
+      "description": "Total hazardous waste generated",
+      "expected_unit": "tonnes",
+      "aliases": [
+        "hazardous waste",
+        "toxic waste",
+        "dangerous waste"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "non_hazardous_waste_total": {
+      "category": "environmental",
+      "description": "Total non-hazardous waste generated",
+      "expected_unit": "tonnes",
+      "aliases": [
+        "non hazardous waste",
+        "non-hazardous waste",
+        "general waste"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "employee_turnover_rate": {
+      "category": "social",
+      "description": "Overall employee turnover rate",
+      "expected_unit": "%",
+      "aliases": [
+        "employee turnover rate",
+        "turnover rate",
+        "attrition rate",
+        "overall attrition"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "voluntary_turnover_rate": {
+      "category": "social",
+      "description": "Voluntary employee turnover rate",
+      "expected_unit": "%",
+      "aliases": [
+        "voluntary turnover rate",
+        "voluntary attrition rate"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "female_employees_share": {
+      "category": "social",
+      "description": "Share of female employees in total workforce",
+      "expected_unit": "%",
+      "aliases": [
+        "female employees percentage",
+        "women in workforce",
+        "female workforce percentage",
+        "gender diversity workforce",
+        "women employees share"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "female_managers_share": {
+      "category": "social",
+      "description": "Share of female managers in management positions",
+      "expected_unit": "%",
+      "aliases": [
+        "female managers percentage",
+        "women in management",
+        "female leadership percentage",
+        "women managers"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "female_board_share": {
+      "category": "governance",
+      "description": "Share of female directors on board",
+      "expected_unit": "%",
+      "aliases": [
+        "female directors percentage",
+        "women on board",
+        "board gender diversity",
+        "women directors"
+      ],
+      "allowed_qualifiers": ["year", "actual_or_target"]
+    },
+    "training_hours_per_employee": {
+      "category": "social",
+      "description": "Average training hours per employee",
+      "expected_unit": "hours",
+      "aliases": [
+        "average training hours per employee",
+        "training hours per employee",
+        "learning hours per employee",
+        "hours of training per employee"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "training_hours_total": {
+      "category": "social",
+      "description": "Total training hours across all employees",
+      "expected_unit": "hours",
+      "aliases": [
+        "total training hours",
+        "training hours total",
+        "overall training hours"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "lost_time_injury_rate": {
+      "category": "social",
+      "description": "Lost time injury frequency rate",
+      "expected_unit": "rate",
+      "aliases": [
+        "lost time injury rate",
+        "ltir",
+        "ltifr",
+        "lost time injury frequency rate"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "total_recordable_injury_rate": {
+      "category": "social",
+      "description": "Total recordable injury rate",
+      "expected_unit": "rate",
+      "aliases": [
+        "total recordable injury rate",
+        "trir",
+        "recordable injury rate"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "fatalities": {
+      "category": "social",
+      "description": "Number of fatalities",
+      "expected_unit": "count",
+      "aliases": [
+        "fatalities",
+        "deaths",
+        "fatal accidents",
+        "fatal incidents"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "employee_satisfaction_score": {
+      "category": "social",
+      "description": "Employee satisfaction score (often percentage)",
+      "expected_unit": "%",
+      "aliases": [
+        "employee satisfaction score",
+        "employee engagement score",
+        "satisfaction rate",
+        "engagement rate"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "community_investment_total": {
+      "category": "social",
+      "description": "Total community investment or CSR spend",
+      "expected_unit": "INR Crore",
+      "aliases": [
+        "community investment",
+        "csr spend",
+        "csr expenditure",
+        "social investment",
+        "charitable contributions",
+        "csr outlay"
+      ],
+      "allowed_qualifiers": ["year", "geography", "actual_or_target"]
+    },
+    "board_independence_share": {
+      "category": "governance",
+      "description": "Share of independent directors on board",
+      "expected_unit": "%",
+      "aliases": [
+        "board independence percentage",
+        "independent directors percentage",
+        "board independence",
+        "share of independent directors"
+      ],
+      "allowed_qualifiers": ["year", "actual_or_target"]
+    },
+    "ceo_pay_ratio": {
+      "category": "governance",
+      "description": "Ratio of CEO pay to median employee pay",
+      "expected_unit": "ratio",
+      "aliases": [
+        "ceo pay ratio",
+        "ceo to median employee pay ratio",
+        "ceo compensation ratio"
+      ],
+      "allowed_qualifiers": ["year", "actual_or_target"]
+    },
+    "ethics_training_completion_rate": {
+      "category": "governance",
+      "description": "Percentage of employees who completed ethics training",
+      "expected_unit": "%",
+      "aliases": [
+        "ethics training completion rate",
+        "ethics training percentage",
+        "compliance training completion rate",
+        "ethics training coverage"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    },
+    "whistleblower_reports_received": {
+      "category": "governance",
+      "description": "Number of whistleblower reports received",
+      "expected_unit": "count",
+      "aliases": [
+        "whistleblower reports",
+        "whistleblower complaints",
+        "whistleblower cases",
+        "ethics hotline reports",
+        "grievance reports"
+      ],
+      "allowed_qualifiers": ["year", "geography", "entity_level", "actual_or_target"]
+    }
+  }
+}
