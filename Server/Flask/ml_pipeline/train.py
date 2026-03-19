@@ -17,7 +17,7 @@ from transformers import RobertaTokenizer, get_linear_schedule_with_warmup
 from typing import List, Dict, Tuple, Optional
 from sklearn.utils.class_weight import compute_class_weight
 
-from .extractor import ESGMetricClassifier
+from .model import ESGMetricClassifier
 from .labeling import METRIC_TO_ID, ID_TO_METRIC, NUM_CLASSES, load_dataset
 
 # ─── CUDA WARNING ───────────────────────────────────────────────────────────
