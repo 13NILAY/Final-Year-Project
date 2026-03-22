@@ -20,14 +20,15 @@ from .extractor import ESGStagedExtractor
 # Evaluation helpers
 # ----------------------------------------------------------------------
 
-def _value_match(val1: float, val2: float, tolerance: float = 0.15) -> bool:
+def _value_match(val1: Optional[float], val2: Optional[float], tolerance: float = 0.15) -> bool:
     """Check if two numeric values match within relative tolerance."""
+    if val1 is None or val2 is None:
+        return False
     if val1 == 0 and val2 == 0:
         return True
     if val1 == 0 or val2 == 0:
         return False
     return abs(val1 - val2) / max(abs(val1), abs(val2)) <= tolerance
-
 
 def _unit_match(unit1: str, unit2: str, alias_manager) -> bool:
     """Normalize and compare units."""
@@ -248,6 +249,8 @@ def evaluate_on_testset(
         rich = extractor.extract_from_text(text)
         # For each predicted metric, create a prediction record
         for canonical, info in rich.items():
+            if info['value'] is None:
+                continue   # skip predictions that didn't extract a numeric value
             pred = {
                 'canonical_metric': canonical,
                 'value': info['value'],
