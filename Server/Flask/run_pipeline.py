@@ -30,6 +30,26 @@ LABELED_DATA_PATH = os.path.join(DATA_DIR, "esg_labeled.jsonl")
 MODEL_PATH = os.path.join(MODELS_DIR, "best_model.pt")
 
 
+# ----------------------------------------------------------------------
+# Auto‑download helper
+# ----------------------------------------------------------------------
+def maybe_download_file(filepath, description):
+    """Download a file to local machine if running in Colab."""
+    try:
+        from google.colab import files
+        print(f"\n📥 Downloading {description}...")
+        files.download(filepath)
+        return True
+    except ImportError:
+        # Not in Colab – just print the path
+        print(f"\n💾 {description} saved at: {filepath}")
+        print("   (If in Kaggle, use the file browser on the left to download it manually.)")
+        return False
+
+
+# ----------------------------------------------------------------------
+# Pipeline steps
+# ----------------------------------------------------------------------
 def step_label():
     """Step 1: Generate labeled dataset from ESG PDFs."""
     print("=" * 60)
@@ -73,7 +93,9 @@ def step_label():
         print(f"   Total negative samples: {stats.get('negative_chunks', 'N/A')}")
 
     return True
-def step_train():
+
+
+def step_train(output_dir=None):
     """Step 2: Train the RoBERTa classifier."""
     print("\n" + "=" * 60)
     print("STEP 2: TRAINING RoBERTa MODEL (Multi-Head Architecture)")
@@ -87,7 +109,9 @@ def step_train():
         print("Run 'python run_pipeline.py label' first.")
         return False
 
-    os.makedirs(MODELS_DIR, exist_ok=True)
+    # Use provided output_dir if specified
+    model_save_dir = output_dir if output_dir else MODELS_DIR
+    os.makedirs(model_save_dir, exist_ok=True)
 
     train_data, val_data, test_data = load_dataset(LABELED_DATA_PATH)
 
@@ -98,8 +122,8 @@ def step_train():
     results = train_model(
         train_data=train_data,
         val_data=val_data,
-        output_dir=MODELS_DIR,
-        epochs=20,
+        output_dir=model_save_dir,
+        epochs=15,
         batch_size=4,
         learning_rate=1e-5,
         max_length=512,
@@ -111,12 +135,18 @@ def step_train():
     print(f"   Best F1: {results['best_val_f1']:.4f} at epoch {results['best_epoch']}")
     print(f"   Model saved: {results['model_path']}")
 
-    # Save test data (with all rich fields) for evaluation
+    # Save test data
     test_path = os.path.join(DATA_DIR, "test_data.jsonl")
     with open(test_path, 'w', encoding='utf-8') as f:
         for sample in test_data:
             f.write(json.dumps(sample, ensure_ascii=False) + '\n')
     print(f"   Test data saved: {test_path}")
+
+    # --- AUTOMATIC DOWNLOAD (Colab / Kaggle) ---
+    # Download the best model
+    maybe_download_file(results['model_path'], "best model")
+    # Download the test data
+    maybe_download_file(test_path, "test dataset")
 
     return True
 
@@ -222,7 +252,8 @@ def main():
         step_label()
 
     elif command == 'train':
-        step_train()
+        output_dir = sys.argv[2] if len(sys.argv) > 2 else None
+        step_train(output_dir)
 
     elif command == 'evaluate':
         f1 = step_evaluate()
