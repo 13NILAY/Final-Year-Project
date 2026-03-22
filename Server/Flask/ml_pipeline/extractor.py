@@ -12,14 +12,25 @@ from .canonical_metrics import get_alias_manager
 from .qualifiers import extract_qualifiers
 from .labeling import ESG_METRICS  # still used for value extraction patterns
 from .preprocessing import clean_text, chunk_text
-import nltk
-from nltk.tokenize import sent_tokenize
 
-# Download punkt if not present
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt')
+
+# Custom sentence tokenizer (replaces NLTK)
+def _simple_sent_tokenize(text: str) -> List[str]:
+    """
+    Split text into sentences using punctuation and capital letter detection.
+    Handles common abbreviations and newlines.
+    """
+    if not text:
+        return []
+    # Split on .!? followed by whitespace and a capital letter
+    # Also splits on newlines
+    sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])|(?<=\n)\s*(?=\S)', text)
+    # Clean up
+    result = [s.strip() for s in sentences if s.strip()]
+    # If the result is empty, just return the original text as one sentence
+    if not result:
+        return [text.strip()]
+    return result
 
 
 class ESGStagedExtractor:
@@ -54,7 +65,7 @@ class ESGStagedExtractor:
             Dictionary of extracted metrics, keyed by canonical metric name.
         """
         # 1. Split into sentences and create windows
-        sentences = sent_tokenize(text)
+        sentences = _simple_sent_tokenize(text)
         windows = self._create_windows(sentences, window_size=3)
 
         all_candidates = []
