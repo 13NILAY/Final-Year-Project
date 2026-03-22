@@ -5,6 +5,7 @@ Evaluate extraction accuracy with rich metrics including qualifiers,
 value tolerance, and error categorization.
 """
 
+
 import os
 import json
 import numpy as np
@@ -19,7 +20,30 @@ from .extractor import ESGStagedExtractor
 # ----------------------------------------------------------------------
 # Evaluation helpers
 # ----------------------------------------------------------------------
-
+# Mapping from legacy metric names (from labeling) to canonical metric names (used by extractor)
+LEGACY_TO_CANONICAL = {
+    'ghg_emissions': 'total_ghg_emissions',
+    'co2_emissions': 'total_ghg_emissions',
+    'energy_consumption': 'energy_consumption_total',
+    'renewable_energy': 'renewable_energy_share',
+    'water_withdrawal': 'water_withdrawal_total',
+    'waste_recycled': 'waste_recycled_share',
+    'hazardous_waste': 'hazardous_waste_total',
+    'employee_turnover': 'employee_turnover_rate',
+    'female_representation': 'female_employees_share',
+    'training_hours': 'training_hours_per_employee',
+    'lost_time_injury': 'lost_time_injury_rate',
+    'employee_satisfaction': 'employee_satisfaction_score',
+    'community_investment': 'community_investment_total',
+    'board_independence': 'board_independence_share',
+    'female_directors': 'female_board_share',
+    'ceo_pay_ratio': 'ceo_pay_ratio',
+    'ethics_training': 'ethics_training_completion_rate',
+    'whistleblower_cases': 'whistleblower_reports_received',
+    'scope1_emissions': 'scope1_emissions',
+    'scope2_emissions': 'scope2_emissions',
+    'scope3_emissions': 'scope3_emissions',
+}
 def _value_match(val1: Optional[float], val2: Optional[float], tolerance: float = 0.15) -> bool:
     """Check if two numeric values match within relative tolerance."""
     if val1 is None or val2 is None:
@@ -229,13 +253,16 @@ def evaluate_on_testset(
     """
     Load test dataset, run extraction on each sample's text, and evaluate.
     """
-    # Load test samples
+      # Load test samples
     ground_truth = []
     with open(test_path, 'r', encoding='utf-8') as f:
         for line in f:
             sample = json.loads(line)
             # Only include positive samples for evaluation (skip no_metric)
             if sample.get('metric_name') != 'no_metric':
+                # Map legacy metric name to canonical
+                canonical = LEGACY_TO_CANONICAL.get(sample['metric_name'], sample['metric_name'])
+                sample['metric_name'] = canonical
                 ground_truth.append(sample)
 
     # Initialize extractor
